@@ -1,0 +1,21 @@
+{
+  "name": "@mpesa/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "M-Pesa SMS parser, categoriser, summaries and database layer (platform-neutral)",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "jest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.14.0",
+    "@types/sql.js": "^1.4.11",
+    "jest": "^30.5.2",
+    "sql.js": "^1.14.2",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.5.4"
+  }
+}

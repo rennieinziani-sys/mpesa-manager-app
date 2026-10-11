@@ -3,18 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "Local-first M-Pesa money manager: SMS parsing, categorisation, budgets",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
-    "test": "jest",
-    "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit"
-  },
-  "devDependencies": {
-    "@types/jest": "^30.0.0",
-    "@types/node": "^20.14.0",
-    "@types/sql.js": "^1.4.11",
-    "jest": "^30.5.2",
-    "sql.js": "^1.14.2",
-    "ts-jest": "^29.2.5",
-    "typescript": "^5.5.4"
+    "test": "npm test --workspace @mpesa/core",
+    "typecheck": "npm run typecheck --workspace @mpesa/core"
   }
 }
