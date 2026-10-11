@@ -64,6 +64,8 @@ export const BUILTIN_RULES: MerchantRule[] = [
 const TYPE_DEFAULTS: Partial<Record<ParsedTransaction['type'], string>> = {
   airtime: 'Airtime & Data',
   withdraw: 'Cash Withdrawal',
+  deposit: 'Transfers',
+  reversal: 'Transfers',
   fuliza_draw: 'Fees & Charges',
   fuliza_repay: 'Savings & Loans',
 };
@@ -74,11 +76,30 @@ export interface Categorization {
   matchedPattern?: string;
 }
 
+/** Best matching rule: highest priority, then longest pattern. */
+function bestMatch(haystackUpper: string, rules: MerchantRule[]): MerchantRule | null {
+  let best: MerchantRule | null = null;
+  for (const r of rules) {
+    const p = r.pattern.trim().toUpperCase();
+    if (!p || !matchesWord(haystackUpper, p)) continue;
+    if (
+      !best ||
+      (r.priority ?? 0) > (best.priority ?? 0) ||
+      ((r.priority ?? 0) === (best.priority ?? 0) && p.length > best.pattern.trim().length)
+    ) {
+      best = r;
+    }
+  }
+  return best;
+}
+
 /**
- * Pick a category for a transaction.
- * 1. Merchant rules (highest priority, then longest pattern) against counterparty+account.
- * 2. Type defaults (airtime, withdraw, Fuliza).
- * 3. Incoming money with no match -> Income (received/deposit/reversal).
+ * Pick a category for a transaction, in this order:
+ * 1. Rules the user created (learned from corrections): the user always wins.
+ * 2. Transaction types with a fixed meaning (airtime, cash withdrawal, agent deposit,
+ *    reversal, Fuliza). An agent called "MAMA MBOGA" must not turn a withdrawal into Groceries.
+ * 3. Built-in merchant rules, against counterparty + account.
+ * 4. Any other incoming money is Income.
  * Returns category null when nothing matches; the UI should surface these for review.
  */
 export function categorize(
@@ -86,25 +107,20 @@ export function categorize(
   rules: MerchantRule[] = BUILTIN_RULES,
 ): Categorization {
   const haystack = `${tx.counterparty ?? ''} ${tx.account ?? ''}`.toUpperCase();
+  const hasText = haystack.trim() !== '';
 
-  if (haystack.trim()) {
-    let best: MerchantRule | null = null;
-    for (const r of rules) {
-      const p = r.pattern.trim().toUpperCase();
-      if (!p || !matchesWord(haystack, p)) continue;
-      if (
-        !best ||
-        (r.priority ?? 0) > (best.priority ?? 0) ||
-        ((r.priority ?? 0) === (best.priority ?? 0) && p.length > best.pattern.trim().length)
-      ) {
-        best = r;
-      }
-    }
-    if (best) return { category: best.category, source: 'rule', matchedPattern: best.pattern };
+  if (hasText) {
+    const userRule = bestMatch(haystack, rules.filter((r) => r.origin === 'user'));
+    if (userRule) return { category: userRule.category, source: 'rule', matchedPattern: userRule.pattern };
   }
 
   const typeDefault = TYPE_DEFAULTS[tx.type];
   if (typeDefault) return { category: typeDefault, source: 'rule' };
+
+  if (hasText) {
+    const rule = bestMatch(haystack, rules.filter((r) => r.origin !== 'user'));
+    if (rule) return { category: rule.category, source: 'rule', matchedPattern: rule.pattern };
+  }
 
   if (tx.direction === 'in') return { category: 'Income', source: 'rule' };
 

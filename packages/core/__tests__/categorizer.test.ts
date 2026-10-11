@@ -36,6 +36,32 @@ describe('categorize', () => {
     });
   });
 
+  test('withdrawals stay Cash Withdrawal even when the agent name matches a merchant rule', () => {
+    expect(
+      categorize({ type: 'withdraw', direction: 'out', counterparty: 'MAMA MBOGA AGENT', account: '123456' }).category,
+    ).toBe('Cash Withdrawal');
+  });
+
+  test('agent deposits and reversals are Transfers, not Income', () => {
+    expect(categorize({ type: 'deposit', direction: 'in', counterparty: 'MAMA MBOGA AGENT', account: null }).category).toBe(
+      'Transfers',
+    );
+    expect(categorize({ type: 'reversal', direction: 'in', counterparty: null, account: 'SJK4X1Y2Z5' }).category).toBe(
+      'Transfers',
+    );
+  });
+
+  test('a rule the user created still overrides a type default', () => {
+    const rules = [
+      ...BUILTIN_RULES,
+      { pattern: 'MAMA MBOGA AGENT', category: 'Groceries', priority: 100, origin: 'user' as const },
+    ];
+    expect(
+      categorize({ type: 'withdraw', direction: 'out', counterparty: 'MAMA MBOGA AGENT', account: '123456' }, rules)
+        .category,
+    ).toBe('Groceries');
+  });
+
   test('user rules outrank builtin rules, longest pattern wins on tie', () => {
     const rules = [
       ...BUILTIN_RULES,
