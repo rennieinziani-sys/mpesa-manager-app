@@ -3,8 +3,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   applyMigrations,
   ingestSms,
+  listBudgets,
   listTransactions,
   seed,
+  setBudget as saveBudget,
+  type Budget,
   type Db,
   type InboxMessage,
   type StoredTransaction,
@@ -17,11 +20,13 @@ export function useLedger(): Ledger {
   const [ready, setReady] = useState(false);
   const [txs, setTxs] = useState<StoredTransaction[]>([]);
   const [unparsedCount, setUnparsedCount] = useState(0);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
 
   const refresh = useCallback(async (db: Db) => {
     setTxs(await listTransactions(db, { limit: 5000 }));
     const [row] = await db.all<{ n: number }>('SELECT COUNT(*) AS n FROM unparsed_sms');
     setUnparsedCount(row?.n ?? 0);
+    setBudgets((await listBudgets(db)).filter((b) => b.period === 'monthly').map((b) => ({ category: b.category, limitCents: b.limitCents })));
   }, []);
 
   useEffect(() => {
@@ -51,5 +56,15 @@ export function useLedger(): Ledger {
     [refresh],
   );
 
-  return { ready, txs, unparsedCount, add };
+  const setBudget = useCallback(
+    async (category: string, limitCents: number) => {
+      const db = dbRef.current;
+      if (!db) throw new Error('Database not ready');
+      await saveBudget(db, category, limitCents);
+      await refresh(db);
+    },
+    [refresh],
+  );
+
+  return { ready, txs, unparsedCount, add, budgets, setBudget };
 }

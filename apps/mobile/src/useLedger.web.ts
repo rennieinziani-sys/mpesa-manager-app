@@ -1,10 +1,11 @@
 // Web preview: in-memory only (expo-sqlite on web is alpha). Real storage is native.
 import { useCallback, useMemo, useState } from 'react';
-import { categorize, parseBatch, type InboxMessage, type StoredTransaction } from '@mpesa/core';
+import { categorize, parseBatch, type Budget, type InboxMessage, type StoredTransaction } from '@mpesa/core';
 import type { AddResult, Ledger } from './ledgerTypes';
 
 export function useLedger(): Ledger {
   const [messages, setMessages] = useState<InboxMessage[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
 
   const { txs, unparsedCount } = useMemo(() => {
     const batch = parseBatch(messages);
@@ -28,5 +29,9 @@ export function useLedger(): Ledger {
     [messages],
   );
 
-  return { ready: true, txs, unparsedCount, add };
+  const setBudget = useCallback(async (category: string, limitCents: number) => {
+    setBudgets((prev) => [...prev.filter((b) => b.category !== category), { category, limitCents }]);
+  }, []);
+
+  return { ready: true, txs, unparsedCount, add, budgets, setBudget };
 }

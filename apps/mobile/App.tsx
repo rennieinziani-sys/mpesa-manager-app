@@ -1,7 +1,17 @@
 import { StatusBar } from 'expo-status-bar';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { formatKes, summarizeMonth, type InboxMessage } from '@mpesa/core';
+import {
+  budgetProgress,
+  DEFAULT_CATEGORIES,
+  detectRecurring,
+  eatDate,
+  forecastMonth,
+  formatKes,
+  runway,
+  summarizeMonth,
+  type InboxMessage,
+} from '@mpesa/core';
 import { SAMPLE_SMS } from './src/sampleSms';
 import { useLedger } from './src/useLedger';
 
@@ -16,10 +26,12 @@ function splitMessages(text: string): InboxMessage[] {
 }
 
 export default function App() {
-  const { ready, txs, unparsedCount, add } = useLedger();
+  const { ready, txs, unparsedCount, add, budgets, setBudget } = useLedger();
   const [draft, setDraft] = useState('');
   const [note, setNote] = useState('');
   const [month, setMonth] = useState<string | null>(null);
+  const [budgetCat, setBudgetCat] = useState<string | null>(null);
+  const [budgetAmt, setBudgetAmt] = useState('');
 
   const months = useMemo(() => [...new Set(txs.map((t) => t.ts.slice(0, 7)))], [txs]);
 
@@ -35,6 +47,20 @@ export default function App() {
         (r.duplicates ? ` (${r.duplicates} already had)` : '') +
         '.',
     );
+  };
+
+  const today = eatDate();
+  const forecast = useMemo(() => forecastMonth(txs, MONTH, today), [txs, MONTH, today]);
+  const progress = useMemo(() => budgetProgress(txs, budgets, MONTH, today), [txs, budgets, MONTH, today]);
+  const recurring = useMemo(() => detectRecurring(txs, today), [txs, today]);
+  const left = useMemo(() => runway(txs, today), [txs, today]);
+  const spendCategories = DEFAULT_CATEGORIES.filter((c) => !c.isIncome).map((c) => c.name);
+
+  const saveBudget = async () => {
+    const kes = Number(budgetAmt.replace(/,/g, ''));
+    if (!budgetCat || !Number.isFinite(kes) || kes <= 0) return;
+    await setBudget(budgetCat, Math.round(kes * 100));
+    setBudgetAmt('');
   };
 
   const maxCat = Math.max(1, ...summary.byCategory.map((c) => c.cents));
@@ -63,6 +89,88 @@ export default function App() {
         <Card label="Fees paid" value={formatKes(summary.feesCents)} />
         <Card label="Fuliza drawn" value={formatKes(summary.fulizaBorrowedCents)} />
       </View>
+
+      {txs.length > 0 && (
+        <>
+          <Text style={s.h2}>Outlook</Text>
+          <View style={s.panel}>
+            <Text style={s.panelLabel}>Projected spend for {MONTH}</Text>
+            <Text style={s.panelValue}>{formatKes(forecast.projectedCents)}</Text>
+            {forecast.projectedCents !== forecast.spentCents && (
+              <Text style={s.note}>
+                Range {formatKes(forecast.lowCents)} to {formatKes(forecast.highCents)} · day {forecast.daysElapsed} of{' '}
+                {forecast.daysInMonth}
+                {forecast.confidence === 'low' ? ' · early estimate, needs more days of data' : ''}
+              </Text>
+            )}
+            {left && (
+              <Text style={[s.note, left.daysLeft < 7 && s.warn]}>
+                Balance {formatKes(left.balanceCents)} (as of {left.balanceAsOf}) lasts about {left.daysLeft} day{left.daysLeft === 1 ? '' : 's'} at
+                your recent pace ({formatKes(left.dailySpendCents)}/day), until {left.runOutDate}.
+              </Text>
+            )}
+          </View>
+          {recurring.length > 0 && (
+            <View style={s.panel}>
+              <Text style={s.panelLabel}>Recurring payments</Text>
+              {recurring.map((r) => (
+                <View key={r.counterparty} style={s.rowBetween}>
+                  <Text style={s.flex}>
+                    {r.counterparty} · {r.cadence}
+                  </Text>
+                  <Text>
+                    ~{formatKes(r.averageCents)} · next {r.nextDate}
+                    {r.daysUntilNext < 0 ? ' (overdue)' : ''}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </>
+      )}
+
+      <Text style={s.h2}>Budgets</Text>
+      {progress.map((b) => (
+        <View key={b.category} style={s.catBlock}>
+          <View style={s.rowBetween}>
+            <Text>{b.category}</Text>
+            <Text style={b.status !== 'on_track' && s.warn}>
+              {formatKes(b.usedCents)} / {formatKes(b.limitCents)}
+              {b.status === 'over' ? ' · over' : b.status === 'at_risk' ? ' · on pace to exceed' : ''}
+            </Text>
+          </View>
+          <View style={s.barBg}>
+            <View
+              style={[
+                s.bar,
+                b.status !== 'on_track' && s.barWarn,
+                { width: `${Math.min(100, (b.usedCents / b.limitCents) * 100)}%` },
+              ]}
+            />
+          </View>
+        </View>
+      ))}
+      <View style={s.months}>
+        {spendCategories.map((c) => (
+          <Pressable key={c} onPress={() => setBudgetCat(c)} style={[s.chip, c === budgetCat && s.chipOn]}>
+            <Text style={c === budgetCat && s.chipTextOn}>{c}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {budgetCat && (
+        <View style={s.budgetRow}>
+          <TextInput
+            style={[s.input, s.flex, s.budgetInput]}
+            value={budgetAmt}
+            onChangeText={setBudgetAmt}
+            keyboardType="numeric"
+            placeholder={`Monthly limit for ${budgetCat} (KES)`}
+          />
+          <Pressable onPress={() => void saveBudget()} style={[s.button, s.budgetBtn]}>
+            <Text style={s.buttonText}>Set</Text>
+          </Pressable>
+        </View>
+      )}
 
       <Text style={s.h2}>Spending by category</Text>
       {summary.byCategory.map((c) => (
@@ -171,7 +279,15 @@ const s = StyleSheet.create({
   txSub: { fontSize: 12, color: '#777', marginTop: 2 },
   amount: { fontSize: 15 },
   amountIn: { color: '#2E7D32' },
-  months: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  panel: { backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 10 },
+  panelLabel: { color: '#777', fontSize: 12, marginBottom: 4 },
+  panelValue: { fontSize: 20, fontWeight: '700' },
+  warn: { color: '#C62828' },
+  barWarn: { backgroundColor: '#C62828' },
+  budgetRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  budgetInput: { minHeight: 40, paddingVertical: 8 },
+  budgetBtn: { marginTop: 0, paddingHorizontal: 20 },
+  months: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: '#e8e8e8' },
   chipOn: { backgroundColor: '#2E7D32' },
   chipTextOn: { color: '#fff' },
