@@ -1,15 +1,9 @@
 import { StatusBar } from 'expo-status-bar';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import {
-  categorize,
-  type InboxMessage,
-  formatKes,
-  parseBatch,
-  summarizeMonth,
-  type StoredTransaction,
-} from '@mpesa/core';
+import { formatKes, summarizeMonth, type InboxMessage } from '@mpesa/core';
 import { SAMPLE_SMS } from './src/sampleSms';
+import { useLedger } from './src/useLedger';
 
 /** Split pasted text into messages: a blank line separates messages. */
 function splitMessages(text: string): InboxMessage[] {
@@ -22,32 +16,25 @@ function splitMessages(text: string): InboxMessage[] {
 }
 
 export default function App() {
-  const [messages, setMessages] = useState<InboxMessage[]>(SAMPLE_SMS);
+  const { ready, txs, unparsedCount, add } = useLedger();
   const [draft, setDraft] = useState('');
   const [note, setNote] = useState('');
   const [month, setMonth] = useState<string | null>(null);
 
-  const { txs, unparsedCount, duplicates, months } = useMemo(() => {
-    const batch = parseBatch(messages);
-    const stored: StoredTransaction[] = batch.parsed
-      .map((t) => ({ ...t, category: categorize(t).category }))
-      .sort((a, b) => b.ts.localeCompare(a.ts));
-    const ms = [...new Set(stored.map((t) => t.ts.slice(0, 7)))];
-    return { txs: stored, unparsedCount: batch.unparsed.length, duplicates: batch.duplicates, months: ms };
-  }, [messages]);
+  const months = useMemo(() => [...new Set(txs.map((t) => t.ts.slice(0, 7)))], [txs]);
 
   const MONTH = month && months.includes(month) ? month : (months[0] ?? new Date().toISOString().slice(0, 7));
   const summary = useMemo(() => summarizeMonth(txs, MONTH), [txs, MONTH]);
   const shown = txs.filter((t) => t.ts.startsWith(MONTH));
 
-  const addMessages = () => {
-    const incoming = splitMessages(draft);
+  const addMessages = async (incoming: InboxMessage[]) => {
     if (!incoming.length) return;
-    const before = parseBatch(messages).parsed.length;
-    const after = parseBatch([...messages, ...incoming]).parsed.length;
-    setMessages([...messages, ...incoming]);
-    setDraft('');
-    setNote(`Added ${after - before} new transaction${after - before === 1 ? '' : 's'} from ${incoming.length} message${incoming.length === 1 ? '' : 's'}.`);
+    const r = await add(incoming);
+    setNote(
+      `Added ${r.inserted} new transaction${r.inserted === 1 ? '' : 's'} from ${incoming.length} message${incoming.length === 1 ? '' : 's'}` +
+        (r.duplicates ? ` (${r.duplicates} already had)` : '') +
+        '.',
+    );
   };
 
   const maxCat = Math.max(1, ...summary.byCategory.map((c) => c.cents));
@@ -98,10 +85,22 @@ export default function App() {
         onChangeText={setDraft}
         placeholder="Paste M-Pesa SMS here (separate messages with a blank line)"
       />
-      <Pressable onPress={addMessages} style={s.button}>
+      <Pressable
+        onPress={() => {
+          void addMessages(splitMessages(draft));
+          setDraft('');
+        }}
+        style={s.button}
+      >
         <Text style={s.buttonText}>Add</Text>
       </Pressable>
       {note !== '' && <Text style={s.note}>{note}</Text>}
+
+      {ready && txs.length === 0 && (
+        <Pressable onPress={() => void addMessages(SAMPLE_SMS)} style={[s.button, s.demo]}>
+          <Text style={s.buttonText}>Load demo data</Text>
+        </Pressable>
+      )}
 
       <Text style={s.h2}>Transactions</Text>
       {shown.map((t) => (
@@ -121,7 +120,7 @@ export default function App() {
       ))}
 
       <Text style={s.footer}>
-        {txs.length} transactions parsed · {duplicates} duplicate{duplicates === 1 ? '' : 's'} skipped · {unparsedCount} message
+        {ready ? '' : 'Loading… '}{txs.length} transactions · {unparsedCount} message
         {unparsedCount === 1 ? '' : 's'} not recognised
       </Text>
     </ScrollView>
@@ -177,6 +176,7 @@ const s = StyleSheet.create({
   chipOn: { backgroundColor: '#2E7D32' },
   chipTextOn: { color: '#fff' },
   input: { minHeight: 90, backgroundColor: '#fff', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#ddd' },
+  demo: { marginTop: 16, backgroundColor: '#555' },
   button: { marginTop: 8, backgroundColor: '#2E7D32', borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
   buttonText: { color: '#fff', fontWeight: '600' },
   note: { marginTop: 6, color: '#555', fontSize: 12 },
