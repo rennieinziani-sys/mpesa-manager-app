@@ -27,7 +27,7 @@ function splitMessages(text: string): InboxMessage[] {
     .map((body) => ({ body, receivedAt }));
 }
 export default function App() {
-  const { ready, txs, unparsedCount, add, budgets, setBudget } = useLedger();
+  const { ready, txs, unparsedCount, unparsed, add, budgets, setBudget } = useLedger();
   const [draft, setDraft] = useState('');
   const [note, setNote] = useState('');
   const [month, setMonth] = useState<string | null>(null);
@@ -228,6 +228,18 @@ export default function App() {
         </View>
       ))}
 
+      {unparsed.length > 0 && (
+        <>
+          <Text style={s.h2}>Not recognised ({unparsed.length})</Text>
+          <Text style={s.note}>These were stored but could not be read. Select and copy one to report it.</Text>
+          {unparsed.slice(0, 20).map((u, i) => (
+            <View key={`${i}-${u.raw.slice(0, 12)}`} style={s.rawBox}>
+              <Text style={s.rawReason}>{u.reason.replace(/_/g, ' ')}</Text>
+              <Text selectable style={s.rawText}>{u.raw}</Text>
+            </View>
+          ))}
+        </>
+      )}
       <Text style={s.footer}>
         {ready ? '' : 'Loading… '}{txs.length} transactions · {unparsedCount} message
         {unparsedCount === 1 ? '' : 's'} not recognised
@@ -297,5 +309,8 @@ const s = StyleSheet.create({
   button: { marginTop: 8, backgroundColor: '#2E7D32', borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
   buttonText: { color: '#fff', fontWeight: '600' },
   note: { marginTop: 6, color: '#555', fontSize: 12 },
+  rawBox: { backgroundColor: '#fff', borderRadius: 8, padding: 10, marginTop: 8, borderLeftWidth: 3, borderLeftColor: '#C62828' },
+  rawReason: { fontSize: 11, color: '#C62828', marginBottom: 4 },
+  rawText: { fontSize: 12, color: '#333' },
   footer: { textAlign: 'center', color: '#888', marginTop: 20, fontSize: 12 },
 });

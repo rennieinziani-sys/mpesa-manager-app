@@ -45,12 +45,16 @@ export function useLedger(): Ledger {
     }
   }, [messages, budgets]);
 
-  const { txs, unparsedCount } = useMemo(() => {
+  const { txs, unparsedCount, unparsed } = useMemo(() => {
     const batch = parseBatch(messages);
     const stored: StoredTransaction[] = batch.parsed
       .map((t) => ({ ...t, category: categorize(t).category }))
       .sort((a, b) => b.ts.localeCompare(a.ts));
-    return { txs: stored, unparsedCount: batch.unparsed.length };
+    return {
+      txs: stored,
+      unparsedCount: batch.unparsed.length,
+      unparsed: batch.unparsed.map((u) => ({ raw: u.raw, reason: String(u.reason) })).reverse(),
+    };
   }, [messages]);
 
   const add = useCallback(
@@ -71,5 +75,5 @@ export function useLedger(): Ledger {
     setBudgets((prev) => [...prev.filter((b) => b.category !== category), { category, limitCents }]);
   }, []);
 
-  return { ready: true, txs, unparsedCount, add, budgets, setBudget };
+  return { ready: true, txs, unparsedCount, unparsed, add, budgets, setBudget };
 }

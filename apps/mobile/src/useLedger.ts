@@ -20,12 +20,14 @@ export function useLedger(): Ledger {
   const [ready, setReady] = useState(false);
   const [txs, setTxs] = useState<StoredTransaction[]>([]);
   const [unparsedCount, setUnparsedCount] = useState(0);
+  const [unparsed, setUnparsed] = useState<{ raw: string; reason: string }[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
 
   const refresh = useCallback(async (db: Db) => {
     setTxs(await listTransactions(db, { limit: 5000 }));
     const [row] = await db.all<{ n: number }>('SELECT COUNT(*) AS n FROM unparsed_sms');
     setUnparsedCount(row?.n ?? 0);
+    setUnparsed(await db.all<{ raw: string; reason: string }>('SELECT raw_sms AS raw, reason FROM unparsed_sms ORDER BY seen_at DESC LIMIT 100'));
     setBudgets((await listBudgets(db)).filter((b) => b.period === 'monthly').map((b) => ({ category: b.category, limitCents: b.limitCents })));
   }, []);
 
@@ -66,5 +68,5 @@ export function useLedger(): Ledger {
     [refresh],
   );
 
-  return { ready, txs, unparsedCount, add, budgets, setBudget };
+  return { ready, txs, unparsedCount, unparsed, add, budgets, setBudget };
 }
