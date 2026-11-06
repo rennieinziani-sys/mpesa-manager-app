@@ -5,6 +5,7 @@ import {
   ingestSms,
   listBudgets,
   listTransactions,
+  recategorize,
   seed,
   setBudget as saveBudget,
   type Budget,
@@ -68,5 +69,15 @@ export function useLedger(): Ledger {
     [refresh],
   );
 
-  return { ready, txs, unparsedCount, unparsed, add, budgets, setBudget };
+  const setCategory = useCallback(
+    async (id: string, category: string) => {
+      const db = dbRef.current;
+      if (!db) throw new Error('Database not ready');
+      await recategorize(db, id, category);
+      await refresh(db);
+    },
+    [refresh],
+  );
+
+  return { ready, txs, unparsedCount, unparsed, add, budgets, setBudget, setCategory };
 }

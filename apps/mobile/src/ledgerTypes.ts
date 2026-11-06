@@ -19,4 +19,6 @@ export interface Ledger {
   /** Monthly spending limits per category. */
   budgets: Budget[];
   setBudget(category: string, limitCents: number): Promise<void>;
+  /** Move one transaction to a category and remember it for future payments to the same payee. */
+  setCategory(id: string, category: string): Promise<void>;
 }

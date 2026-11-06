@@ -1,6 +1,14 @@
 // Web/PC: transactions are re-parsed from raw messages kept in the browser's localStorage.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { categorize, parseBatch, type Budget, type InboxMessage, type StoredTransaction } from '@mpesa/core';
+import {
+  BUILTIN_RULES,
+  categorize,
+  parseBatch,
+  type Budget,
+  type InboxMessage,
+  type MerchantRule,
+  type StoredTransaction,
+} from '@mpesa/core';
 import type { AddResult, Ledger } from './ledgerTypes';
 
 const KEY = 'mpesa-manager:v1';
@@ -17,7 +25,15 @@ const storage = (): KV | null => {
   }
 };
 
-function load(): { messages: InboxMessage[]; budgets: Budget[] } {
+interface Saved {
+  messages: InboxMessage[];
+  budgets: Budget[];
+  rules: MerchantRule[];
+  overrides: Record<string, string>;
+}
+
+function load(): Saved {
+  const empty: Saved = { messages: [], budgets: [], rules: [], overrides: {} };
   try {
     const raw = storage()?.getItem(KEY);
     if (raw) {
@@ -25,37 +41,43 @@ function load(): { messages: InboxMessage[]; budgets: Budget[] } {
       return {
         messages: Array.isArray(p.messages) ? p.messages : [],
         budgets: Array.isArray(p.budgets) ? p.budgets : [],
+        rules: Array.isArray(p.rules) ? p.rules : [],
+        overrides: p.overrides && typeof p.overrides === 'object' ? p.overrides : {},
       };
     }
   } catch {
     // corrupt or unavailable storage: start empty
   }
-  return { messages: [], budgets: [] };
+  return empty;
 }
 
 export function useLedger(): Ledger {
-  const [messages, setMessages] = useState<InboxMessage[]>(() => load().messages);
-  const [budgets, setBudgets] = useState<Budget[]>(() => load().budgets);
+  const [init] = useState(load);
+  const [messages, setMessages] = useState<InboxMessage[]>(init.messages);
+  const [budgets, setBudgets] = useState<Budget[]>(init.budgets);
+  const [rules, setRules] = useState<MerchantRule[]>(init.rules);
+  const [overrides, setOverrides] = useState<Record<string, string>>(init.overrides);
 
   useEffect(() => {
     try {
-      storage()?.setItem(KEY, JSON.stringify({ messages, budgets }));
+      storage()?.setItem(KEY, JSON.stringify({ messages, budgets, rules, overrides }));
     } catch {
       // storage full or blocked: keep working in memory
     }
-  }, [messages, budgets]);
+  }, [messages, budgets, rules, overrides]);
 
   const { txs, unparsedCount, unparsed } = useMemo(() => {
     const batch = parseBatch(messages);
+    const allRules = [...BUILTIN_RULES, ...rules];
     const stored: StoredTransaction[] = batch.parsed
-      .map((t) => ({ ...t, category: categorize(t).category }))
+      .map((t) => ({ ...t, category: overrides[t.id] ?? categorize(t, allRules).category }))
       .sort((a, b) => b.ts.localeCompare(a.ts));
     return {
       txs: stored,
       unparsedCount: batch.unparsed.length,
       unparsed: batch.unparsed.map((u) => ({ raw: u.raw, reason: String(u.reason) })).reverse(),
     };
-  }, [messages]);
+  }, [messages, rules, overrides]);
 
   const add = useCallback(
     async (incoming: InboxMessage[]): Promise<AddResult> => {
@@ -75,5 +97,20 @@ export function useLedger(): Ledger {
     setBudgets((prev) => [...prev.filter((b) => b.category !== category), { category, limitCents }]);
   }, []);
 
-  return { ready: true, txs, unparsedCount, unparsed, add, budgets, setBudget };
+  const setCategory = useCallback(
+    async (id: string, category: string) => {
+      setOverrides((prev) => ({ ...prev, [id]: category }));
+      const tx = txs.find((t) => t.id === id);
+      const payee = tx?.counterparty?.toUpperCase();
+      if (payee) {
+        setRules((prev) => [
+          ...prev.filter((r) => r.pattern !== payee),
+          { pattern: payee, category, priority: 100, origin: 'user' },
+        ]);
+      }
+    },
+    [txs],
+  );
+
+  return { ready: true, txs, unparsedCount, unparsed, add, budgets, setBudget, setCategory };
 }

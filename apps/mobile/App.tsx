@@ -27,12 +27,13 @@ function splitMessages(text: string): InboxMessage[] {
     .map((body) => ({ body, receivedAt }));
 }
 export default function App() {
-  const { ready, txs, unparsedCount, unparsed, add, budgets, setBudget } = useLedger();
+  const { ready, txs, unparsedCount, unparsed, add, budgets, setBudget, setCategory } = useLedger();
   const [draft, setDraft] = useState('');
   const [note, setNote] = useState('');
   const [month, setMonth] = useState<string | null>(null);
   const [budgetCat, setBudgetCat] = useState<string | null>(null);
   const [budgetAmt, setBudgetAmt] = useState('');
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const months = useMemo(() => [...new Set(txs.map((t) => t.ts.slice(0, 7)))], [txs]);
 
@@ -56,6 +57,7 @@ export default function App() {
   const recurring = useMemo(() => detectRecurring(txs, today), [txs, today]);
   const left = useMemo(() => runway(txs, today), [txs, today]);
   const spendCategories = DEFAULT_CATEGORIES.filter((c) => !c.isIncome).map((c) => c.name);
+  const allCategories = DEFAULT_CATEGORIES.map((c) => c.name);
 
   const saveBudget = async () => {
     const kes = Number(budgetAmt.replace(/,/g, ''));
@@ -213,18 +215,41 @@ export default function App() {
 
       <Text style={s.h2}>Transactions</Text>
       {shown.map((t) => (
-        <View key={t.id} style={s.txRow}>
-          <View style={s.flex}>
-            <Text style={s.txTitle}>{t.counterparty ?? LABELS[t.type] ?? t.type}</Text>
-            <Text style={s.txSub}>
-              {t.ts.slice(0, 10)} · {t.category ?? 'Uncategorised'}
-              {t.feeCents ? ` · fee ${formatKes(t.feeCents)}` : ''}
+        <View key={t.id}>
+          <Pressable onPress={() => setOpenId(openId === t.id ? null : t.id)} style={s.txRow}>
+            <View style={s.flex}>
+              <Text style={s.txTitle}>{t.counterparty ?? LABELS[t.type] ?? t.type}</Text>
+              <Text style={s.txSub}>
+                {t.ts.slice(0, 10)} · {t.category ?? 'Uncategorised'}
+                {t.feeCents ? ` · fee ${formatKes(t.feeCents)}` : ''}
+              </Text>
+            </View>
+            <Text style={[s.amount, t.direction === 'in' && s.amountIn]}>
+              {t.direction === 'in' ? '+' : t.direction === 'out' ? '-' : ''}
+              {formatKes(t.amountCents)}
             </Text>
-          </View>
-          <Text style={[s.amount, t.direction === 'in' && s.amountIn]}>
-            {t.direction === 'in' ? '+' : t.direction === 'out' ? '-' : ''}
-            {formatKes(t.amountCents)}
-          </Text>
+          </Pressable>
+          {openId === t.id && (
+            <View style={s.picker}>
+              <Text style={s.panelLabel}>
+                Move to category{t.counterparty ? ` (future payments to ${t.counterparty} follow)` : ''}
+              </Text>
+              <View style={s.months}>
+                {allCategories.map((c) => (
+                  <Pressable
+                    key={c}
+                    onPress={() => {
+                      void setCategory(t.id, c);
+                      setOpenId(null);
+                    }}
+                    style={[s.chip, c === t.category && s.chipOn]}
+                  >
+                    <Text style={c === t.category && s.chipTextOn}>{c}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
         </View>
       ))}
 
@@ -312,5 +337,6 @@ const s = StyleSheet.create({
   rawBox: { backgroundColor: '#fff', borderRadius: 8, padding: 10, marginTop: 8, borderLeftWidth: 3, borderLeftColor: '#C62828' },
   rawReason: { fontSize: 11, color: '#C62828', marginBottom: 4 },
   rawText: { fontSize: 12, color: '#333' },
+  picker: { backgroundColor: '#f3f8f3', padding: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#e0e0e0' },
   footer: { textAlign: 'center', color: '#888', marginTop: 20, fontSize: 12 },
 });
