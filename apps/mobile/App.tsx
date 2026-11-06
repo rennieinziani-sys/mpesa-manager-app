@@ -20,11 +20,12 @@ function splitMessages(text: string): InboxMessage[] {
   const receivedAt = new Date().toISOString();
   return text
     .split(/\r?\n\s*\r?\n/)
+    // Also split before each transaction code, so pasted stretches of an inbox work without blank lines.
+    .flatMap((block) => block.split(/(?=\b[A-Z0-9]{10}\s+Confirmed\b)/))
     .map((b) => b.replace(/\s*\r?\n\s*/g, ' ').trim())
     .filter(Boolean)
     .map((body) => ({ body, receivedAt }));
 }
-
 export default function App() {
   const { ready, txs, unparsedCount, add, budgets, setBudget } = useLedger();
   const [draft, setDraft] = useState('');
