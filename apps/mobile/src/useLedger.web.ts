@@ -1,11 +1,49 @@
-// Web preview: in-memory only (expo-sqlite on web is alpha). Real storage is native.
-import { useCallback, useMemo, useState } from 'react';
+// Web/PC: transactions are re-parsed from raw messages kept in the browser's localStorage.
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { categorize, parseBatch, type Budget, type InboxMessage, type StoredTransaction } from '@mpesa/core';
 import type { AddResult, Ledger } from './ledgerTypes';
 
+const KEY = 'mpesa-manager:v1';
+
+interface KV {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+const storage = (): KV | null => {
+  try {
+    return (globalThis as { localStorage?: KV }).localStorage ?? null;
+  } catch {
+    return null;
+  }
+};
+
+function load(): { messages: InboxMessage[]; budgets: Budget[] } {
+  try {
+    const raw = storage()?.getItem(KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      return {
+        messages: Array.isArray(p.messages) ? p.messages : [],
+        budgets: Array.isArray(p.budgets) ? p.budgets : [],
+      };
+    }
+  } catch {
+    // corrupt or unavailable storage: start empty
+  }
+  return { messages: [], budgets: [] };
+}
+
 export function useLedger(): Ledger {
-  const [messages, setMessages] = useState<InboxMessage[]>([]);
-  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [messages, setMessages] = useState<InboxMessage[]>(() => load().messages);
+  const [budgets, setBudgets] = useState<Budget[]>(() => load().budgets);
+
+  useEffect(() => {
+    try {
+      storage()?.setItem(KEY, JSON.stringify({ messages, budgets }));
+    } catch {
+      // storage full or blocked: keep working in memory
+    }
+  }, [messages, budgets]);
 
   const { txs, unparsedCount } = useMemo(() => {
     const batch = parseBatch(messages);

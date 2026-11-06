@@ -1,19 +1,23 @@
 {
-    "expo":  {
-                 "name":  "M-Pesa Manager",
-                 "slug":  "mpesa-manager",
-                 "version":  "0.1.0",
-                 "orientation":  "portrait",
-                 "userInterfaceStyle":  "light",
-                 "ios":  {
-                             "supportsTablet":  true
-                         },
-                 "android":  {
-                                 "predictiveBackGestureEnabled":  false,
-                                 "package":  "com.rennieinziani.mpesamanager"
-                             },
-                 "web":  {
-
-                         }
-             }
+  "expo": {
+    "name": "M-Pesa Manager",
+    "slug": "mpesa-manager",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "predictiveBackGestureEnabled": false,
+      "package": "com.rennieinziani.mpesamanager"
+    },
+    "web": {},
+    "extra": {
+      "eas": {
+        "projectId": "e8c1e234-433a-454d-880e-b2c694231a8b"
+      }
+    },
+    "owner": "quant.ke"
+  }
 }
