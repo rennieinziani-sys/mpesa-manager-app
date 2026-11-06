@@ -1,16 +1,19 @@
 {
-  "expo": {
-    "name": "M-Pesa Manager",
-    "slug": "mpesa-manager",
-    "version": "0.1.0",
-    "orientation": "portrait",
-    "userInterfaceStyle": "light",
-    "ios": {
-      "supportsTablet": true
-    },
-    "android": {
-      "predictiveBackGestureEnabled": false
-    },
-    "web": {}
-  }
+    "expo":  {
+                 "name":  "M-Pesa Manager",
+                 "slug":  "mpesa-manager",
+                 "version":  "0.1.0",
+                 "orientation":  "portrait",
+                 "userInterfaceStyle":  "light",
+                 "ios":  {
+                             "supportsTablet":  true
+                         },
+                 "android":  {
+                                 "predictiveBackGestureEnabled":  false,
+                                 "package":  "com.rennieinziani.mpesamanager"
+                             },
+                 "web":  {
+
+                         }
+             }
 }
